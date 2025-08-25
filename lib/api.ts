@@ -26,14 +26,81 @@ export async function generateFromText(
     
     if (!r.ok) throw new Error(`API ${r.status}: ${r.statusText}`);
     
-    const j = await r.json().catch(() => ({ ok: false, error: "Invalid JSON from server" }));
-    if (!j.ok) throw new Error(j.error || `Request failed (${r.status})`);
+    const raw = await r.text();
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch {
+      throw new Error("Invalid JSON from server");
+    }
+
+    // Accept both shapes: { ok:true, data: {...} } OR direct WorkoutJSON
+    if (parsed && parsed.ok === true && parsed.data) {
+      return parsed.data;
+    }
+    if (parsed && typeof parsed.title === "string" && Array.isArray(parsed.blocks)) {
+      return parsed;
+    }
     
-    return j; // already a WorkoutJSON with debug
+    // Handle AI responses that don't match expected schema
+    if (parsed && parsed.debug?.used_ai && parsed.type) {
+      // Convert AI response to WorkoutJSON format
+      const converted = convertAIResponse(parsed);
+      if (converted) return converted;
+    }
+    
+    if (parsed && parsed.ok === false) {
+      throw new Error(parsed.error || "Server reported failure");
+    }
+    throw new Error("Unexpected server response shape");
   } catch (e: any) {
     if (e?.name === "AbortError") throw new Error("Request timed out. Check network and API URL.");
     throw e;
   } finally {
     clearTimeout(t);
+  }
+}
+
+function convertAIResponse(aiResponse: any) {
+  try {
+    if (aiResponse.type === "INTERVAL" && aiResponse.exercises) {
+      // Convert AI interval format to WorkoutJSON
+      return {
+        title: aiResponse.title,
+        total_minutes: aiResponse.total_minutes,
+        blocks: [{
+          type: "INTERVAL",
+          work_seconds: aiResponse.exercises[0]?.duration_seconds || 30,
+          rest_seconds: aiResponse.exercises[0]?.rest_seconds || 15,
+          sets: aiResponse.rounds || 10,
+          sequence: aiResponse.exercises.map((ex: any) => ({
+            name: ex.name,
+            seconds: ex.duration_seconds,
+            rest_after_seconds: ex.rest_seconds
+          }))
+        }],
+        cues: { start: true, last_round: true, halfway: true, tts: true },
+        debug: { used_ai: true, inferred_mode: "INTERVAL(sequence)", notes: "Converted from AI response" }
+      };
+    }
+    
+    if (aiResponse.type === "EMOM") {
+      return {
+        title: aiResponse.title,
+        total_minutes: aiResponse.total_minutes,
+        blocks: [{
+          type: "EMOM",
+          minutes: aiResponse.total_minutes,
+          instructions: aiResponse.exercises?.map((ex: any) => ({
+            name: ex.name,
+            target_seconds: ex.duration_seconds
+          })) || [{ name: "Work" }]
+        }],
+        cues: { start: true, last_round: true, halfway: true, tts: true },
+        debug: { used_ai: true, inferred_mode: "EMOM", notes: "Converted from AI response" }
+      };
+    }
+    
+    return null;
+  } catch {
+    return null;
   }
 }
