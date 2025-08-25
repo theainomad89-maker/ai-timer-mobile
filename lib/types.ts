@@ -31,11 +31,11 @@ export const IntervalBlock = BaseBlock.extend({
   work_seconds: z.number().int().positive(),
   rest_seconds: z.number().int().nonnegative().default(0),
   sets: z.number().int().positive(),
-  exercises: z.array(z.object({
+  sequence: z.array(z.object({
     name: z.string(),
-    seconds: z.number().int().positive().optional(),
-    reps: z.number().int().positive().optional(),
-  })).optional(),
+    seconds: z.number().int().positive(),
+    rest_after_seconds: z.number().int().nonnegative().optional(),
+  })).optional(), // when provided, a set is composed of these sequential steps
 });
 
 export const CircuitBlock = BaseBlock.extend({
@@ -66,7 +66,12 @@ export const WorkoutJSON = z.object({
   title: z.string(),
   total_minutes: z.number().positive(),
   blocks: z.array(WorkoutBlock).min(1),
-  cues: CueSettings.default({ start:true, halfway:false, last_round:true, tts:true })
+  cues: CueSettings.default({ start:true, halfway:false, last_round:true, tts:true }),
+  debug: z.object({
+    used_ai: z.boolean().default(true),
+    inferred_mode: z.string().optional(),
+    notes: z.string().optional(),
+  }).optional()
 });
 export type WorkoutJSON = z.infer<typeof WorkoutJSON>;
 

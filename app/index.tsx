@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, TextInput, ScrollView, Text, Alert } from "react-native";
+import { View, TextInput, ScrollView, Text, Alert, TouchableOpacity } from "react-native";
 import { Label, Button, Card } from "@/components/Field";
 import { generateFromText } from "@/lib/api";
 import { buildTimeline } from "@/lib/timeline";
@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 export default function Index(){
   const [text, setText] = useState("20-min EMOM. Odd: 12 burpees. Even: 45s plank.");
   const [loading, setLoading] = useState(false);
+  const [userLevel, setUserLevel] = useState<"beginner" | "intermediate" | "advanced">("beginner");
   const setWorkout = useTimerStore(s=>s.setWorkout);
   const router = useRouter();
 
@@ -21,7 +22,7 @@ export default function Index(){
     
     setLoading(true);
     try {
-      const w: WorkoutJSON = await generateFromText(text);
+      const w: WorkoutJSON = await generateFromText(text, { level: userLevel });
       const tl = buildTimeline(w);
       setWorkout(w, tl);
       router.push("/preview");
@@ -41,6 +42,31 @@ export default function Index(){
         <Text style={{ fontSize: 16, color: '#666', marginBottom: 20, textAlign: 'center' }}>
           Describe your workout and get a smart timer with voice cues
         </Text>
+        
+        <Label>Fitness Level</Label>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+          {(["beginner", "intermediate", "advanced"] as const).map((level) => (
+            <TouchableOpacity
+              key={level}
+              onPress={() => setUserLevel(level)}
+              style={{
+                flex: 1,
+                padding: 8,
+                borderRadius: 6,
+                backgroundColor: userLevel === level ? '#007AFF' : '#E5E5EA',
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ 
+                color: userLevel === level ? 'white' : '#8E8E93',
+                fontWeight: userLevel === level ? '600' : '400',
+                textTransform: 'capitalize'
+              }}>
+                {level}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         
         <Label>Describe your workout</Label>
         <TextInput 

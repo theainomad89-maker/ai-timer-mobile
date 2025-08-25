@@ -6,8 +6,7 @@ export function buildTimeline(w: WorkoutJSON): TimelineEvent[] {
 
   w.blocks.forEach((b, bi) => {
     if (b.type === "EMOM") {
-      const minutes = b.minutes;
-      for (let m = 0; m < minutes; m++) {
+      for (let m = 0; m < b.minutes; m++) {
         const instr = b.instructions.find(i =>
           (i.minute_mod === "odd" && (m+1)%2===1) ||
           (i.minute_mod === "even" && (m+1)%2===0)
@@ -27,7 +26,29 @@ export function buildTimeline(w: WorkoutJSON): TimelineEvent[] {
       }
     }
 
-    if (b.type === "INTERVAL") {
+    else if (b.type === "INTERVAL" && b.sequence?.length) {
+      for (let s = 1; s <= b.sets; s++) {
+        for (const step of b.sequence) {
+          const start = cursor, end = cursor + step.seconds*1000;
+          events.push({ 
+            startMs: start, 
+            endMs: end, 
+            label: `${step.name} (${s}/${b.sets})`, 
+            blockIndex: bi, 
+            round: s, 
+            cueAtMs: [start, end-5_000] 
+          });
+          cursor = end;
+          if (step.rest_after_seconds) {
+            const rs = cursor, re = cursor + step.rest_after_seconds*1000;
+            events.push({ startMs: rs, endMs: re, label: `Rest (${s}/${b.sets})`, blockIndex: bi, round: s });
+            cursor = re;
+          }
+        }
+      }
+    }
+
+    else if (b.type === "INTERVAL") {
       for (let s = 1; s <= b.sets; s++) {
         const workStart = cursor;
         const workEnd = cursor + (b.work_seconds * 1000);

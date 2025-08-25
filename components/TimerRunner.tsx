@@ -13,6 +13,7 @@ export default function TimerRunner(){
   const rafRef = useRef<number | undefined>(undefined);
 
   const current = tl[idx];
+  const next = tl[idx + 1];
   const total = current ? (current.endMs - current.startMs) : 0;
   const remaining = current ? Math.max(0, total - now) : 0;
 
@@ -23,8 +24,9 @@ export default function TimerRunner(){
     startRef.current = start;
     const loop = ()=>{
       const t = Date.now();
-      setNow(t - (startRef.current || t));
-      if (current && (t - (startRef.current || t)) >= current.endMs){
+      const elapsed = t - (startRef.current || t);
+      setNow(elapsed);
+      if (current && elapsed >= total){
         setIdx(i => (i+1 < tl.length ? i+1 : i));
         startRef.current = Date.now();
         setNow(0);
@@ -37,11 +39,12 @@ export default function TimerRunner(){
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [tl.length, isRunning, current]);
+  }, [tl.length, isRunning, current, total]);
 
   useEffect(()=>{
     if (!current || !isRunning) return;
     try {
+      // Announce current step
       Speech.speak(current.label, { rate: 1.0 });
       Vibration.vibrate(50);
       
@@ -53,10 +56,22 @@ export default function TimerRunner(){
             Vibration.vibrate([100, 100, 100]);
           }
         }, Math.max(0, total - 5000));
-        return ()=> clearTimeout(timeout);
+        
+        // Three second warning with next step preview
+        const nextTimeout = setTimeout(()=> {
+          if (isRunning && next) {
+            Speech.speak(`Next: ${next.label}`, { rate: 0.9 });
+            Vibration.vibrate([50, 100, 50]);
+          }
+        }, Math.max(0, total - 3000));
+        
+        return ()=> {
+          clearTimeout(timeout);
+          clearTimeout(nextTimeout);
+        };
       }
     } catch {}
-  }, [idx, current, total, isRunning]);
+  }, [idx, current, total, isRunning, next]);
 
   const startTimer = () => {
     setIsRunning(true);
@@ -101,6 +116,21 @@ export default function TimerRunner(){
       <View style={{ height: 8, backgroundColor: '#eee', borderRadius: 4, overflow: 'hidden', marginBottom: 16 }}>
         <View style={{ height: '100%', width: `${pct}%`, backgroundColor: '#000' }} />
       </View>
+      
+      {/* Next step preview */}
+      {next && (
+        <View style={{ 
+          backgroundColor: '#f0f8ff', 
+          padding: 8, 
+          borderRadius: 6, 
+          marginBottom: 12,
+          borderLeftWidth: 3,
+          borderLeftColor: '#007AFF'
+        }}>
+          <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>Next:</Text>
+          <Text style={{ fontSize: 14, color: '#007AFF', fontWeight: '500' }}>{next.label}</Text>
+        </View>
+      )}
       
       {/* Control buttons */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>

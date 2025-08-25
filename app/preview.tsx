@@ -22,6 +22,29 @@ export default function Preview(){
           {w.total_minutes} minutes
         </Text>
         
+        {/* Debug Badge */}
+        {w.debug && (
+          <View style={{ 
+            backgroundColor: w.debug.used_ai ? '#E8F5E8' : '#FFF3E0', 
+            padding: 8, 
+            borderRadius: 6, 
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: w.debug.used_ai ? '#4CAF50' : '#FF9800'
+          }}>
+            <Text style={{ 
+              color: w.debug.used_ai ? '#2E7D32' : '#E65100', 
+              fontSize: 12, 
+              fontWeight: '600',
+              textAlign: 'center'
+            }}>
+              {w.debug.used_ai ? "🤖 AI Generated" : "⚡ Deterministic Parse"}
+              {w.debug.inferred_mode && ` • ${w.debug.inferred_mode}`}
+              {w.debug.notes && ` • ${w.debug.notes}`}
+            </Text>
+          </View>
+        )}
+        
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>Workout Structure:</Text>
           {w.blocks.map((b, i) => (
@@ -39,6 +62,42 @@ export default function Preview(){
                   {b.title}
                 </Text>
               )}
+              
+              {/* Block-specific details */}
+              {b.type === "EMOM" && (
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
+                  {b.minutes} minutes • {b.instructions.map(x => 
+                    x.minute_mod ? `${x.minute_mod}: ${x.name}` : x.name
+                  ).join(" | ")}
+                </Text>
+              )}
+              
+              {b.type === "INTERVAL" && b.sequence && (
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
+                  Sets {b.sets} • {b.sequence.map(s => `${s.seconds}s ${s.name}`).join(" → ")}
+                </Text>
+              )}
+              
+              {b.type === "INTERVAL" && !b.sequence && (
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
+                  {b.sets}x {b.work_seconds}s / {b.rest_seconds}s
+                </Text>
+              )}
+              
+              {b.type === "CIRCUIT" && (
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
+                  {b.rounds} rounds • {b.exercises.map(e => 
+                    e.seconds ? `${e.seconds}s ${e.name}` : e.name
+                  ).join(", ")}
+                </Text>
+              )}
+              
+              {b.type === "TABATA" && (
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
+                  {b.rounds}x {b.work_seconds}/{b.rest_seconds}
+                </Text>
+              )}
+              
               {b.notes && (
                 <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
                   {b.notes}
