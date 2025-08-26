@@ -1,5 +1,9 @@
 import { View, Text, TouchableOpacity } from "react-native";
 
+export function Field({ children }: { children: React.ReactNode }) {
+  return <View style={{ marginBottom: 16 }}>{children}</View>;
+}
+
 export function Label({ children }: { children: React.ReactNode }) {
   return <Text style={{ fontSize: 14, marginBottom: 6 }}>{children}</Text>;
 }

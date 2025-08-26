@@ -45,6 +45,20 @@ export function buildTimeline(w: WorkoutJSON): TimelineEvent[] {
             cursor = re;
           }
         }
+        
+        // Add rest between sets (except after the last set)
+        if (b.rest_seconds > 0 && s < b.sets) {
+          const restStart = cursor;
+          const restEnd = cursor + (b.rest_seconds * 1000);
+          events.push({ 
+            startMs: restStart, 
+            endMs: restEnd, 
+            label: `Rest between rounds (${s}/${b.sets})`, 
+            blockIndex: bi, 
+            round: s 
+          });
+          cursor = restEnd;
+        }
       }
     }
 
