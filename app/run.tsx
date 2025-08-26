@@ -2,6 +2,7 @@ import { ScrollView, View, Text } from "react-native";
 import TimerRunner from "@/components/TimerRunner";
 import { useTimerStore } from "@/store/useTimerStore";
 import { useRouter } from "expo-router";
+import { computeTotalSeconds, formatDuration } from "@/lib/timeline";
 
 export default function Run(){
   const w = useTimerStore(s=>s.workout);
@@ -10,6 +11,25 @@ export default function Run(){
   if (!w) {
     router.replace("/");
     return null;
+  }
+  
+  // Handle both timeline-based and legacy responses
+  let totalTime = "";
+  let blockInfo = "";
+  
+  if (w.timeline && Array.isArray(w.timeline)) {
+    // New timeline-based format
+    const totalSeconds = computeTotalSeconds(w.timeline);
+    totalTime = formatDuration(totalSeconds);
+    blockInfo = `${w.timeline.length} steps`;
+  } else if (w.total_minutes && w.blocks) {
+    // Legacy block-based format
+    totalTime = `${w.total_minutes} minutes`;
+    blockInfo = `${w.blocks.length} blocks`;
+  } else {
+    // Fallback
+    totalTime = "Unknown duration";
+    blockInfo = "Unknown structure";
   }
   
   return (
@@ -26,7 +46,7 @@ export default function Run(){
           {w.title}
         </Text>
         <Text style={{ fontSize: 16, color: '#666', textAlign: 'center' }}>
-          {w.total_minutes} minutes • {w.blocks.length} blocks
+          {totalTime} • {blockInfo}
         </Text>
       </View>
       
