@@ -1,121 +1,136 @@
-import { View, Text, ScrollView } from "react-native";
-import { useTimerStore } from "@/store/useTimerStore";
-import { Button, Card } from "@/components/Field";
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
+import { useTimerStore } from "../store/useTimerStore";
+import { computeTotalSeconds, formatDuration } from "../lib/timeline";
 
-export default function Preview(){
-  const w = useTimerStore(s=>s.workout);
+export default function Preview() {
+  const { workout } = useTimerStore();
   const router = useRouter();
-  
-  if (!w) {
+
+  if (!workout) {
     router.replace("/");
     return null;
   }
+
+  const totalSeconds = computeTotalSeconds(workout.timeline);
+  const totalFormatted = formatDuration(totalSeconds);
+
+  // Derive simple stats from timeline for display
+  const workItems = workout.timeline.filter(item => item.kind === 'work');
+  const restItems = workout.timeline.filter(item => item.kind === 'rest');
+  const roundRestItems = workout.timeline.filter(item => item.kind === 'round_rest');
   
+  const rounds = workout.timeline[0]?.round || 1;
+  const avgWorkTime = workItems.length > 0 ? Math.round(workItems.reduce((sum, item) => sum + item.seconds, 0) / workItems.length) : 0;
+  const avgRestTime = restItems.length > 0 ? Math.round(restItems.reduce((sum, item) => sum + item.seconds, 0) / restItems.length) : 0;
+  const roundRestTime = roundRestItems.length > 0 ? roundRestItems[0]?.seconds || 0 : 0;
+
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, backgroundColor: '#f8f9fa', minHeight: '100%' }}>
-      <Card>
-        <Text style={{ fontSize: 24, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
-          {w.title}
-        </Text>
-        <Text style={{ fontSize: 18, color: '#666', marginBottom: 20, textAlign: 'center' }}>
-          {w.total_minutes} minutes
+    <ScrollView style={{ flex: 1, padding: 16 }}>
+      <View style={{ marginBottom: 24 }}>
+        <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 8 }}>
+          {workout.title}
         </Text>
         
-        {/* Debug Badge */}
-        {w.debug && (
+        <Text style={{ fontSize: 18, color: "#666", marginBottom: 16 }}>
+          {totalFormatted} total
+        </Text>
+
+        {/* Debug badge */}
+        {workout.debug && (
           <View style={{ 
-            backgroundColor: w.debug.used_ai ? '#E8F5E8' : '#FFF3E0', 
+            backgroundColor: workout.debug.used_ai ? "#e8f5e8" : "#fff3cd", 
             padding: 8, 
             borderRadius: 6, 
-            marginBottom: 16,
-            borderWidth: 1,
-            borderColor: w.debug.used_ai ? '#4CAF50' : '#FF9800'
+            marginBottom: 16 
           }}>
             <Text style={{ 
-              color: w.debug.used_ai ? '#2E7D32' : '#E65100', 
-              fontSize: 12, 
-              fontWeight: '600',
-              textAlign: 'center'
+              color: workout.debug.used_ai ? "#0a0" : "#a60", 
+              fontSize: 14 
             }}>
-              {w.debug.used_ai ? "🤖 AI Generated" : "⚡ Deterministic Parse"}
-              {w.debug.inferred_mode && ` • ${w.debug.inferred_mode}`}
-              {w.debug.notes && ` • ${w.debug.notes}`}
+              {workout.debug.used_ai ? "🤖 AI Generated" : "⚡ Deterministic Parse"} 
+              {workout.debug.inferred_mode ? ` • ${workout.debug.inferred_mode}` : ""} 
+              {workout.debug.notes ? ` • ${workout.debug.notes}` : ""}
             </Text>
           </View>
         )}
-        
-        <View style={{ marginBottom: 20 }}>
-          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>Workout Structure:</Text>
-          {w.blocks.map((b, i) => (
-            <View key={i} style={{ 
-              padding: 12, 
-              backgroundColor: '#f8f9fa', 
-              borderRadius: 8, 
-              marginBottom: 8 
+
+        {/* Workout summary */}
+        <View style={{ 
+          backgroundColor: "#f8f9fa", 
+          padding: 16, 
+          borderRadius: 8, 
+          marginBottom: 16 
+        }}>
+          <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+            Workout Summary
+          </Text>
+          <Text style={{ fontSize: 14, color: "#666", marginBottom: 4 }}>
+            {rounds} rounds • {workItems.length} exercises
+          </Text>
+          {avgWorkTime > 0 && (
+            <Text style={{ fontSize: 14, color: "#666", marginBottom: 4 }}>
+              {avgWorkTime}s work intervals
+            </Text>
+          )}
+          {avgRestTime > 0 && (
+            <Text style={{ fontSize: 14, color: "#666", marginBottom: 4 }}>
+              {avgRestTime}s rest between exercises
+            </Text>
+          )}
+          {roundRestTime > 0 && (
+            <Text style={{ fontSize: 14, color: "#666" }}>
+              {formatDuration(roundRestTime)} rest between rounds
+            </Text>
+          )}
+        </View>
+
+        {/* Timeline preview */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+            Timeline Preview
+          </Text>
+          {workout.timeline.slice(0, 10).map((item, index) => (
+            <View key={index} style={{ 
+              flexDirection: "row", 
+              justifyContent: "space-between", 
+              paddingVertical: 4,
+              borderBottomWidth: 1,
+              borderBottomColor: "#eee"
             }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: '#333' }}>
-                {b.type}
+              <Text style={{ 
+                fontSize: 14, 
+                color: item.kind === 'work' ? "#000" : "#666",
+                fontWeight: item.kind === 'work' ? "500" : "400"
+              }}>
+                {item.label}
               </Text>
-              {b.title && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.title}
-                </Text>
-              )}
-              
-              {/* Block-specific details */}
-              {b.type === "EMOM" && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.minutes} minutes • {b.instructions.map(x => 
-                    x.minute_mod ? `${x.minute_mod}: ${x.name}` : x.name
-                  ).join(" | ")}
-                </Text>
-              )}
-              
-              {b.type === "INTERVAL" && b.sequence && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  Sets {b.sets} • {b.sequence.map(s => `${s.seconds}s ${s.name}`).join(" → ")}
-                </Text>
-              )}
-              
-              {b.type === "INTERVAL" && !b.sequence && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.sets}x {b.work_seconds}s / {b.rest_seconds}s
-                </Text>
-              )}
-              
-              {b.type === "CIRCUIT" && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.rounds} rounds • {b.exercises.map(e => 
-                    e.seconds ? `${e.seconds}s ${e.name}` : e.name
-                  ).join(", ")}
-                </Text>
-              )}
-              
-              {b.type === "TABATA" && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.rounds}x {b.work_seconds}/{b.rest_seconds}
-                </Text>
-              )}
-              
-              {b.notes && (
-                <Text style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-                  {b.notes}
-                </Text>
-              )}
+              <Text style={{ fontSize: 14, color: "#666" }}>
+                {item.seconds}s
+              </Text>
             </View>
           ))}
+          {workout.timeline.length > 10 && (
+            <Text style={{ fontSize: 14, color: "#999", textAlign: "center", marginTop: 8 }}>
+              ... and {workout.timeline.length - 10} more items
+            </Text>
+          )}
         </View>
-        
-        <Button title="Start Workout" onPress={()=> router.push("/run")} />
-        
-        <View style={{ height: 16 }} />
-        
-        <Button 
-          title="Back to Edit" 
-          onPress={()=> router.back()} 
-        />
-      </Card>
+      </View>
+
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#007AFF",
+          padding: 16,
+          borderRadius: 8,
+          alignItems: "center",
+        }}
+        onPress={() => router.push("/run")}
+      >
+        <Text style={{ color: "white", fontSize: 18, fontWeight: "600" }}>
+          Start Workout
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }

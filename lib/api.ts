@@ -10,7 +10,7 @@ export async function generateFromText(text: string) {
   }
   
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 15000);
+  const t = setTimeout(() => controller.abort(), 30000); // Increased to 30 seconds
   
   try {
     const r = await fetch(`${API_BASE_URL}/generate`, {
@@ -26,6 +26,11 @@ export async function generateFromText(text: string) {
     let parsed: any;
     try { parsed = JSON.parse(raw); } catch {
       throw new Error("Invalid JSON from server");
+    }
+
+    // Handle new timeline-based responses
+    if (parsed && Array.isArray(parsed.timeline)) {
+      return parsed; // Return timeline-based response directly
     }
 
     // Accept both shapes: { ok:true, data: {...} } OR direct WorkoutJSON
