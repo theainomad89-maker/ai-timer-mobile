@@ -101,6 +101,36 @@ export default function TimelinePreview() {
     useTimerStore.getState().setWorkout(updatedWorkout, updatedTimeline);
   };
 
+  const handleInsertEvent = (afterIndex: number) => {
+    // Insert a new event after the specified index
+    const afterEvent = timeline[afterIndex];
+    const newEvent: TimerEvent = {
+      startMs: afterEvent.endMs,
+      endMs: afterEvent.endMs + 30000, // 30 seconds default
+      label: 'New Exercise',
+      blockIndex: 0,
+      round: afterEvent.round || 1,
+      cueAtMs: [afterEvent.endMs, afterEvent.endMs + 25000],
+      kind: 'work'
+    };
+
+    const updatedTimeline = [...timeline];
+    updatedTimeline.splice(afterIndex + 1, 0, newEvent);
+    
+    // Shift all subsequent events
+    for (let i = afterIndex + 2; i < updatedTimeline.length; i++) {
+      const shift = 30000; // 30 seconds
+      updatedTimeline[i].startMs += shift;
+      updatedTimeline[i].endMs += shift;
+      if (updatedTimeline[i].cueAtMs) {
+        updatedTimeline[i].cueAtMs = updatedTimeline[i].cueAtMs!.map(ms => ms + shift);
+      }
+    }
+    
+    const updatedWorkout = rebuildWorkoutFromTimeline(workout, updatedTimeline);
+    useTimerStore.getState().setWorkout(updatedWorkout, updatedTimeline);
+  };
+
   const handleDragEnd = ({ data, from, to }: { data: TimerEvent[], from: number, to: number }) => {
     if (from !== to) {
       // Reorder the timeline
@@ -195,6 +225,7 @@ export default function TimelinePreview() {
                   index={index}
                   onEdit={handleEditEvent}
                   onDelete={handleDeleteEvent}
+                  onInsert={handleInsertEvent}
                   getEventColor={getEventColor}
                   formatTime={formatTime}
                   formatDuration={formatDuration}
@@ -328,6 +359,7 @@ function SwipeableEvent({
   index, 
   onEdit, 
   onDelete, 
+  onInsert,
   getEventColor, 
   formatTime, 
   formatDuration 
@@ -336,6 +368,7 @@ function SwipeableEvent({
   index: number;
   onEdit: (event: TimerEvent) => void;
   onDelete: (event: TimerEvent) => void;
+  onInsert: (afterIndex: number) => void;
   getEventColor: (kind?: string) => string;
   formatTime: (ms: number) => string;
   formatDuration: (startMs: number, endMs: number) => string;
@@ -408,6 +441,18 @@ function SwipeableEvent({
               </TouchableOpacity>
               
               <TouchableOpacity 
+                onPress={() => onInsert(index)} 
+                style={{ 
+                  backgroundColor: '#34C759', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 4 
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12 }}>Insert</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
                 onPress={() => onDelete(event)} 
                 style={{ 
                   backgroundColor: '#FF3B30', 
@@ -445,6 +490,19 @@ function SwipeableEvent({
             }}
           >
             <Text style={{ color: 'white', fontSize: 12 }}>Edit</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => onInsert(index)} 
+            style={{ 
+              backgroundColor: '#34C759', 
+              paddingHorizontal: 12, 
+              paddingVertical: 6, 
+              borderRadius: 4,
+              marginRight: 8
+            }}
+          >
+            <Text style={{ color: 'white', fontSize: 12 }}>Insert</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
