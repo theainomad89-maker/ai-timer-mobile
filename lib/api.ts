@@ -10,7 +10,7 @@ export async function generateFromText(text: string) {
   }
   
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 15000);
+  const t = setTimeout(() => controller.abort(), 60000); // Increased from 15000 to 60000 (60 seconds)
   
   try {
     const r = await fetch(`${API_BASE_URL}/generate`, {
