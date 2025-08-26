@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useTimerStore } from '../store/useTimerStore';
-import { WorkoutJSON, TimelineEvent } from '../lib/types';
-import { buildTimeline } from '../lib/timeline';
-import { Field, Label } from '../components/Field';
+import { useTimerStore } from '@/store/useTimerStore';
+import { WorkoutJSON, TimelineEvent } from '@/lib/types';
+import { buildTimeline } from '@/lib/timeline';
+import { Field, Label } from '@/components/Field';
 
 export default function TimelinePreview() {
   const router = useRouter();
