@@ -26,7 +26,7 @@ export default function Run(){
           {w.title}
         </Text>
         <Text style={{ fontSize: 16, color: '#666', textAlign: 'center' }}>
-          {w.total_minutes} minutes • {w.blocks.length} blocks
+          {Math.ceil(w.total_seconds / 60)} minutes • {w.timeline.length} events
         </Text>
       </View>
       
