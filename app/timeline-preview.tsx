@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTimerStore } from '@/store/useTimerStore';
-import { WorkoutJSON, TimelineEvent } from '@/lib/types';
+import { WorkoutJSON, TimerEvent } from '@/lib/types';
 import { buildTimeline } from '@/lib/timeline';
 import { Field, Label } from '@/components/Field';
 
 export default function TimelinePreview() {
   const router = useRouter();
   const { workout, timeline } = useTimerStore();
-  const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<TimerEvent | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editSeconds, setEditSeconds] = useState('');
@@ -25,7 +25,7 @@ export default function TimelinePreview() {
     );
   }
 
-  const handleEditEvent = (event: TimelineEvent) => {
+  const handleEditEvent = (event: TimerEvent) => {
     setEditingEvent(event);
     setEditName(event.label);
     setEditSeconds(Math.floor((event.endMs - event.startMs) / 1000).toString());
@@ -64,7 +64,7 @@ export default function TimelinePreview() {
     setEditingEvent(null);
   };
 
-  const handleDeleteEvent = (event: TimelineEvent) => {
+  const handleDeleteEvent = (event: TimerEvent) => {
     Alert.alert(
       'Delete Event',
       `Are you sure you want to delete "${event.label}"?`,
@@ -83,47 +83,58 @@ export default function TimelinePreview() {
     );
   };
 
-  const handleAddEvent = (afterEvent: TimelineEvent) => {
+  const handleAddEvent = (afterEvent: TimerEvent) => {
     // Add a new event after the selected one
-    const newEvent: TimelineEvent = {
+    const newEvent: TimerEvent = {
       startMs: afterEvent.endMs,
       endMs: afterEvent.endMs + 30000, // 30 seconds default
       label: 'New Exercise',
       blockIndex: afterEvent.blockIndex,
-      round: afterEvent.round,
-      cueAtMs: [afterEvent.endMs, afterEvent.endMs + 25000]
+      round: afterEvent.round || 1,
+      cueAtMs: [afterEvent.endMs, afterEvent.endMs + 25000],
+      kind: 'work'
     };
 
     const updatedTimeline = [...timeline];
     const insertIndex = updatedTimeline.indexOf(afterEvent) + 1;
     updatedTimeline.splice(insertIndex, 0, newEvent);
     
-    // Adjust all subsequent event times
+    // Shift all subsequent events
     for (let i = insertIndex + 1; i < updatedTimeline.length; i++) {
-      const shift = newEvent.endMs - newEvent.startMs;
+      const shift = 30000; // 30 seconds
       updatedTimeline[i].startMs += shift;
       updatedTimeline[i].endMs += shift;
+      if (updatedTimeline[i].cueAtMs) {
+        updatedTimeline[i].cueAtMs = updatedTimeline[i].cueAtMs!.map(ms => ms + shift);
+      }
     }
-
+    
     const updatedWorkout = rebuildWorkoutFromTimeline(workout, updatedTimeline);
     useTimerStore.getState().setWorkout(updatedWorkout, updatedTimeline);
   };
 
   const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const formatDuration = (startMs: number, endMs: number) => {
-    const duration = Math.floor((endMs - startMs) / 1000);
-    if (duration < 60) {
-      return `${duration}s`;
+    const duration = endMs - startMs;
+    if (duration < 60000) {
+      return `${Math.floor(duration / 1000)}s`;
+    } else {
+      return `${Math.floor(duration / 60000)}m ${Math.floor((duration % 60000) / 1000)}s`;
     }
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const getEventColor = (kind?: string) => {
+    switch (kind) {
+      case 'work': return '#34C759';
+      case 'rest': return '#FF9500';
+      case 'round_rest': return '#FF3B30';
+      default: return '#007AFF';
+    }
   };
 
   return (
@@ -134,40 +145,11 @@ export default function TimelinePreview() {
           <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 8 }}>
             {workout.title}
           </Text>
-          <Text style={{ fontSize: 16, color: '#666' }}>
-            {workout.total_minutes} minutes • {workout.blocks.length} blocks
+          <Text style={{ fontSize: 16, color: '#666', marginBottom: 12 }}>
+            {Math.ceil(workout.total_seconds / 60)} minutes • {timeline.length} events
           </Text>
-          {workout.debug && (
-            <View style={{ 
-              backgroundColor: workout.debug.used_ai ? '#e8f5e8' : '#fff3cd',
-              padding: 8,
-              borderRadius: 8,
-              marginTop: 8
-            }}>
-              <Text style={{ 
-                color: workout.debug.used_ai ? '#0a0' : '#856404',
-                fontSize: 12
-              }}>
-                {workout.debug.used_ai ? '🤖 AI Generated' : '⚡ Deterministic Parse'} • 
-                {workout.debug.inferred_mode || ''} 
-                {workout.debug.notes ? ` • ${workout.debug.notes}` : ''}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Instructions */}
-        <View style={{ 
-          backgroundColor: '#e3f2fd', 
-          padding: 16, 
-          borderRadius: 8, 
-          marginBottom: 20 
-        }}>
-          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
-            📋 Workout Preview
-          </Text>
-          <Text style={{ fontSize: 14, color: '#1976d2' }}>
-            Review your workout timeline below. Swipe left on any event to edit, delete, or add new events.
+          <Text style={{ fontSize: 14, color: '#999' }}>
+            Swipe left on any event to edit, delete, or add new events
           </Text>
         </View>
 
@@ -176,68 +158,53 @@ export default function TimelinePreview() {
           <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
             Timeline ({timeline.length} events)
           </Text>
-          
           {timeline.map((event, index) => (
             <View key={index} style={{ marginBottom: 12 }}>
               <View style={{ 
                 backgroundColor: 'white', 
-                padding: 16, 
-                borderRadius: 8,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2
+                borderRadius: 8, 
+                padding: 16,
+                borderLeftWidth: 4,
+                borderLeftColor: getEventColor(event.kind)
               }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 4 }}>
-                      {event.label}
-                    </Text>
-                    <Text style={{ fontSize: 14, color: '#666' }}>
-                      {formatTime(event.startMs)} - {formatTime(event.endMs)} • {formatDuration(event.startMs, event.endMs)}
-                    </Text>
-                    {event.round && (
-                      <Text style={{ fontSize: 12, color: '#999' }}>
-                        Round {event.round}
-                      </Text>
-                    )}
+                    <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 4 }}>{event.label}</Text>
+                    <Text style={{ fontSize: 14, color: '#666' }}>{formatTime(event.startMs)} - {formatTime(event.endMs)} • {formatDuration(event.startMs, event.endMs)}</Text>
+                    {event.round && (<Text style={{ fontSize: 12, color: '#999' }}>Round {event.round}</Text>)}
                   </View>
-                  
                   <View style={{ flexDirection: 'row' }}>
-                    <TouchableOpacity
-                      onPress={() => handleEditEvent(event)}
+                    <TouchableOpacity 
+                      onPress={() => handleEditEvent(event)} 
                       style={{ 
                         backgroundColor: '#007AFF', 
                         paddingHorizontal: 12, 
                         paddingVertical: 6, 
-                        borderRadius: 6,
-                        marginRight: 8
+                        borderRadius: 4, 
+                        marginRight: 8 
                       }}
                     >
                       <Text style={{ color: 'white', fontSize: 12 }}>Edit</Text>
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      onPress={() => handleDeleteEvent(event)}
+                    <TouchableOpacity 
+                      onPress={() => handleDeleteEvent(event)} 
                       style={{ 
                         backgroundColor: '#FF3B30', 
                         paddingHorizontal: 12, 
                         paddingVertical: 6, 
-                        borderRadius: 6,
-                        marginRight: 8
+                        borderRadius: 4, 
+                        marginRight: 8 
                       }}
                     >
                       <Text style={{ color: 'white', fontSize: 12 }}>Delete</Text>
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      onPress={() => handleAddEvent(event)}
+                    <TouchableOpacity 
+                      onPress={() => handleAddEvent(event)} 
                       style={{ 
                         backgroundColor: '#34C759', 
                         paddingHorizontal: 12, 
                         paddingVertical: 6, 
-                        borderRadius: 6
+                        borderRadius: 4 
                       }}
                     >
                       <Text style={{ color: 'white', fontSize: 12 }}>Add</Text>
@@ -267,7 +234,7 @@ export default function TimelinePreview() {
           </TouchableOpacity>
           
           <TouchableOpacity
-            onPress={() => router.push('/run')}
+            onPress={() => router.push("/run")}
             style={{ 
               flex: 1, 
               backgroundColor: '#34C759', 
@@ -284,12 +251,7 @@ export default function TimelinePreview() {
       </View>
 
       {/* Edit Modal */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
+      <Modal visible={editModalVisible} animationType="slide" transparent={true} onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ 
           flex: 1, 
           backgroundColor: 'rgba(0,0,0,0.5)', 
@@ -303,64 +265,62 @@ export default function TimelinePreview() {
             width: '80%',
             maxWidth: 400
           }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
-              Edit Event
-            </Text>
+            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 16 }}>Edit Event</Text>
             
             <Field>
               <Label>Event Name</Label>
-              <TextInput
-                value={editName}
-                onChangeText={setEditName}
+              <TextInput 
+                value={editName} 
+                onChangeText={setEditName} 
                 style={{ 
                   borderWidth: 1, 
                   borderColor: '#ddd', 
-                  borderRadius: 6, 
-                  padding: 12,
-                  fontSize: 16
-                }}
+                  borderRadius: 8, 
+                  padding: 12, 
+                  fontSize: 16 
+                }} 
                 placeholder="Enter event name"
               />
             </Field>
             
             <Field>
               <Label>Duration (seconds)</Label>
-              <TextInput
-                value={editSeconds}
-                onChangeText={setEditSeconds}
+              <TextInput 
+                value={editSeconds} 
+                onChangeText={setEditSeconds} 
                 style={{ 
                   borderWidth: 1, 
                   borderColor: '#ddd', 
-                  borderRadius: 6, 
-                  padding: 12,
-                  fontSize: 16
-                }}
-                placeholder="Enter duration in seconds"
+                  borderRadius: 8, 
+                  padding: 12, 
+                  fontSize: 16 
+                }} 
+                placeholder="Enter duration in seconds" 
                 keyboardType="numeric"
               />
             </Field>
             
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-              <TouchableOpacity
-                onPress={() => setEditModalVisible(false)}
+              <TouchableOpacity 
+                onPress={() => setEditModalVisible(false)} 
                 style={{ 
                   flex: 1, 
                   backgroundColor: '#666', 
-                  padding: 12, 
-                  borderRadius: 6,
+                  padding: 16, 
+                  borderRadius: 8,
                   alignItems: 'center'
                 }}
               >
                 <Text style={{ color: 'white' }}>Cancel</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity
-                onPress={handleSaveEdit}
+              <TouchableOpacity 
+                onPress={handleSaveEdit} 
                 style={{ 
                   flex: 1, 
                   backgroundColor: '#007AFF', 
-                  padding: 12, 
-                  borderRadius: 6,
+                  padding: 16, 
+                  borderRadius: 8,
                   alignItems: 'center'
                 }}
               >
@@ -374,15 +334,7 @@ export default function TimelinePreview() {
   );
 }
 
-// Helper function to rebuild workout from timeline
-function rebuildWorkoutFromTimeline(workout: WorkoutJSON, timeline: TimelineEvent[]): WorkoutJSON {
-  // This is a simplified version - in a real app you'd want more sophisticated logic
-  // to properly reconstruct the workout structure from timeline changes
-  
-  const totalMinutes = Math.ceil(timeline[timeline.length - 1]?.endMs / 60000) || workout.total_minutes;
-  
-  return {
-    ...workout,
-    total_minutes: totalMinutes
-  };
+function rebuildWorkoutFromTimeline(workout: WorkoutJSON, timeline: TimerEvent[]): WorkoutJSON {
+  const totalSeconds = timeline[timeline.length - 1]?.endMs / 1000 || workout.total_seconds;
+  return { ...workout, total_seconds: totalSeconds };
 }

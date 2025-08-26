@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import type { WorkoutJSON, TimelineEvent } from "@/lib/types";
+import type { WorkoutJSON, TimerEvent } from "@/lib/types";
 
 type S = {
   workout: WorkoutJSON | null;
-  timeline: TimelineEvent[];
-  setWorkout: (w: WorkoutJSON, tl: TimelineEvent[]) => void;
+  timeline: TimerEvent[];
+  setWorkout: (w: WorkoutJSON, tl: TimerEvent[]) => void;
 };
 
 export const useTimerStore = create<S>((set)=>({
