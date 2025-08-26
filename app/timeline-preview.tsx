@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useState, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Animated } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import { useRouter } from 'expo-router';
 import { useTimerStore } from '@/store/useTimerStore';
 import { WorkoutJSON, TimerEvent } from '@/lib/types';
 import { buildTimeline } from '@/lib/timeline';
@@ -83,34 +84,43 @@ export default function TimelinePreview() {
     );
   };
 
-  const handleAddEvent = (afterEvent: TimerEvent) => {
-    // Add a new event after the selected one
+  const handleAddEvent = () => {
+    // Add a new event at the end
     const newEvent: TimerEvent = {
-      startMs: afterEvent.endMs,
-      endMs: afterEvent.endMs + 30000, // 30 seconds default
+      startMs: timeline[timeline.length - 1]?.endMs || 0,
+      endMs: (timeline[timeline.length - 1]?.endMs || 0) + 30000, // 30 seconds default
       label: 'New Exercise',
-      blockIndex: afterEvent.blockIndex,
-      round: afterEvent.round || 1,
-      cueAtMs: [afterEvent.endMs, afterEvent.endMs + 25000],
+      blockIndex: 0,
+      round: Math.max(...timeline.map(e => e.round || 1)),
+      cueAtMs: [(timeline[timeline.length - 1]?.endMs || 0), (timeline[timeline.length - 1]?.endMs || 0) + 25000],
       kind: 'work'
     };
 
-    const updatedTimeline = [...timeline];
-    const insertIndex = updatedTimeline.indexOf(afterEvent) + 1;
-    updatedTimeline.splice(insertIndex, 0, newEvent);
-    
-    // Shift all subsequent events
-    for (let i = insertIndex + 1; i < updatedTimeline.length; i++) {
-      const shift = 30000; // 30 seconds
-      updatedTimeline[i].startMs += shift;
-      updatedTimeline[i].endMs += shift;
-      if (updatedTimeline[i].cueAtMs) {
-        updatedTimeline[i].cueAtMs = updatedTimeline[i].cueAtMs!.map(ms => ms + shift);
-      }
-    }
-    
+    const updatedTimeline = [...timeline, newEvent];
     const updatedWorkout = rebuildWorkoutFromTimeline(workout, updatedTimeline);
     useTimerStore.getState().setWorkout(updatedWorkout, updatedTimeline);
+  };
+
+  const handleDragEnd = ({ data, from, to }: { data: TimerEvent[], from: number, to: number }) => {
+    if (from !== to) {
+      // Reorder the timeline
+      const updatedTimeline = [...data];
+      
+      // Recalculate all timestamps
+      let cursor = 0;
+      for (let i = 0; i < updatedTimeline.length; i++) {
+        const duration = updatedTimeline[i].endMs - updatedTimeline[i].startMs;
+        updatedTimeline[i].startMs = cursor;
+        updatedTimeline[i].endMs = cursor + duration;
+        if (updatedTimeline[i].cueAtMs) {
+          updatedTimeline[i].cueAtMs = [cursor, cursor + duration - 5000];
+        }
+        cursor = updatedTimeline[i].endMs;
+      }
+      
+      const updatedWorkout = rebuildWorkoutFromTimeline(workout, updatedTimeline);
+      useTimerStore.getState().setWorkout(updatedWorkout, updatedTimeline);
+    }
   };
 
   const formatTime = (ms: number) => {
@@ -149,71 +159,49 @@ export default function TimelinePreview() {
             {Math.ceil(workout.total_seconds / 60)} minutes • {timeline.length} events
           </Text>
           <Text style={{ fontSize: 14, color: '#999' }}>
-            Swipe left on any event to edit, delete, or add new events
+            Swipe left on any event to edit or delete. Drag to reorder.
           </Text>
         </View>
+
+        {/* Add Event Button */}
+        <TouchableOpacity
+          onPress={handleAddEvent}
+          style={{
+            backgroundColor: '#34C759',
+            padding: 16,
+            borderRadius: 8,
+            alignItems: 'center',
+            marginBottom: 20
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
+            + Add New Event
+          </Text>
+        </TouchableOpacity>
 
         {/* Timeline */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
             Timeline ({timeline.length} events)
           </Text>
-          {timeline.map((event, index) => (
-            <View key={index} style={{ marginBottom: 12 }}>
-              <View style={{ 
-                backgroundColor: 'white', 
-                borderRadius: 8, 
-                padding: 16,
-                borderLeftWidth: 4,
-                borderLeftColor: getEventColor(event.kind)
-              }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 4 }}>{event.label}</Text>
-                    <Text style={{ fontSize: 14, color: '#666' }}>{formatTime(event.startMs)} - {formatTime(event.endMs)} • {formatDuration(event.startMs, event.endMs)}</Text>
-                    {event.round && (<Text style={{ fontSize: 12, color: '#999' }}>Round {event.round}</Text>)}
-                  </View>
-                  <View style={{ flexDirection: 'row' }}>
-                    <TouchableOpacity 
-                      onPress={() => handleEditEvent(event)} 
-                      style={{ 
-                        backgroundColor: '#007AFF', 
-                        paddingHorizontal: 12, 
-                        paddingVertical: 6, 
-                        borderRadius: 4, 
-                        marginRight: 8 
-                      }}
-                    >
-                      <Text style={{ color: 'white', fontSize: 12 }}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      onPress={() => handleDeleteEvent(event)} 
-                      style={{ 
-                        backgroundColor: '#FF3B30', 
-                        paddingHorizontal: 12, 
-                        paddingVertical: 6, 
-                        borderRadius: 4, 
-                        marginRight: 8 
-                      }}
-                    >
-                      <Text style={{ color: 'white', fontSize: 12 }}>Delete</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      onPress={() => handleAddEvent(event)} 
-                      style={{ 
-                        backgroundColor: '#34C759', 
-                        paddingHorizontal: 12, 
-                        paddingVertical: 6, 
-                        borderRadius: 4 
-                      }}
-                    >
-                      <Text style={{ color: 'white', fontSize: 12 }}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </View>
-          ))}
+          <DraggableFlatList
+            data={timeline}
+            onDragEnd={handleDragEnd}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item, index }) => (
+              <ScaleDecorator>
+                <SwipeableEvent
+                  event={item}
+                  index={index}
+                  onEdit={handleEditEvent}
+                  onDelete={handleDeleteEvent}
+                  getEventColor={getEventColor}
+                  formatTime={formatTime}
+                  formatDuration={formatDuration}
+                />
+              </ScaleDecorator>
+            )}
+          />
         </View>
 
         {/* Action Buttons */}
@@ -331,6 +319,148 @@ export default function TimelinePreview() {
         </View>
       </Modal>
     </ScrollView>
+  );
+}
+
+// Swipeable Event Component
+function SwipeableEvent({ 
+  event, 
+  index, 
+  onEdit, 
+  onDelete, 
+  getEventColor, 
+  formatTime, 
+  formatDuration 
+}: {
+  event: TimerEvent;
+  index: number;
+  onEdit: (event: TimerEvent) => void;
+  onDelete: (event: TimerEvent) => void;
+  getEventColor: (kind?: string) => string;
+  formatTime: (ms: number) => string;
+  formatDuration: (startMs: number, endMs: number) => string;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [isSwiped, setIsSwiped] = useState(false);
+
+  const handleSwipe = (direction: 'left' | 'right') => {
+    if (direction === 'left' && !isSwiped) {
+      Animated.timing(translateX, {
+        toValue: -120,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setIsSwiped(true));
+    } else if (direction === 'right' && isSwiped) {
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setIsSwiped(false));
+    }
+  };
+
+  const handlePanGestureEvent = (event: any) => {
+    const { translationX } = event.nativeEvent;
+    
+    if (translationX < -50 && !isSwiped) {
+      handleSwipe('left');
+    } else if (translationX > 50 && isSwiped) {
+      handleSwipe('right');
+    }
+  };
+
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Animated.View style={{
+        transform: [{ translateX }],
+        backgroundColor: 'white',
+        borderRadius: 8,
+        padding: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: getEventColor(event.kind),
+        opacity: 1, // isDragging is now handled by DraggableFlatList
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 4 }}>{event.label}</Text>
+            <Text style={{ fontSize: 14, color: '#666' }}>{formatTime(event.startMs)} - {formatTime(event.endMs)} • {formatDuration(event.startMs, event.endMs)}</Text>
+            {event.round && (<Text style={{ fontSize: 12, color: '#999' }}>Round {event.round}</Text>)}
+          </View>
+          
+          {/* Action Buttons (visible when swiped) */}
+          {isSwiped && (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity 
+                onPress={() => onEdit(event)} 
+                style={{ 
+                  backgroundColor: '#007AFF', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 4 
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12 }}>Edit</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => onDelete(event)} 
+                style={{ 
+                  backgroundColor: '#FF3B30', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 4 
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12 }}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Animated.View>
+      
+      {/* Hidden action buttons behind the card */}
+      {!isSwiped && (
+        <View style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingRight: 16,
+        }}>
+          <TouchableOpacity 
+            onPress={() => onEdit(event)} 
+            style={{ 
+              backgroundColor: '#007AFF', 
+              paddingHorizontal: 12, 
+              paddingVertical: 6, 
+              borderRadius: 4,
+              marginRight: 8
+            }}
+          >
+            <Text style={{ color: 'white', fontSize: 12 }}>Edit</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => onDelete(event)} 
+            style={{ 
+              backgroundColor: '#FF3B30', 
+              paddingHorizontal: 12, 
+              paddingVertical: 6, 
+              borderRadius: 4 
+            }}
+          >
+            <Text style={{ color: 'white', fontSize: 12 }}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 }
 
