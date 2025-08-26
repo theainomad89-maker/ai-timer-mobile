@@ -32,6 +32,13 @@ export async function generateFromText(text: string) {
     if (parsed && parsed.ok === true && parsed.data) {
       return parsed.data;
     }
+    
+    // NEW: Handle timeline format from simplified backend
+    if (parsed && Array.isArray(parsed.timeline)) {
+      return parsed;
+    }
+    
+    // OLD: Handle legacy blocks format
     if (parsed && typeof parsed.title === "string" && Array.isArray(parsed.blocks)) {
       return parsed;
     }
@@ -54,6 +61,11 @@ export async function generateFromText(text: string) {
 
 function convertAIResponse(ai: any) {
   try {
+    // NEW: Handle timeline format from simplified backend
+    if (ai && Array.isArray(ai.timeline)) {
+      return ai; // Already in correct format
+    }
+    
     // Case 1: prior AI shape { type: "INTERVAL", rounds, exercises: [{name,duration_seconds,rest_seconds?}] }
     if (ai?.type === "INTERVAL" && Array.isArray(ai.exercises)) {
       const seq = [] as Array<{ name: string; seconds: number; rest_after_seconds?: number }>; 
