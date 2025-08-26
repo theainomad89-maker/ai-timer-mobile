@@ -1,55 +1,86 @@
 import { z } from "zod";
 
-export type TimelineKind = 
-  | 'prep'
-  | 'work' 
-  | 'rest'
-  | 'round_rest'
-  | 'cooldown';
-
-export type TimelineItem = {
-  kind: TimelineKind;
-  label: string;        // e.g. "Run", "Rest", "Between-round rest"
-  seconds: number;      // integer seconds
-  round?: number;       // 1-based
-  index?: number;       // position within the round, 1-based
-};
-
-export type WorkoutJSON = {
-  title: string;
-  timeline: TimelineItem[];   // <-- authoritative
-  total_seconds?: number;     // server may include; client still recomputes
-  blocks?: unknown;           // optional: keep if you want
-  debug?: Record<string, any>;
-};
-
-// Zod schemas
-export const TimelineItemSchema = z.object({
-  kind: z.enum(['prep','work','rest','round_rest','cooldown']),
-  label: z.string(),
-  seconds: z.number().int().positive(),
-  round: z.number().int().positive().optional(),
-  index: z.number().int().positive().optional(),
-});
-
-export const WorkoutJSONSchema = z.object({
-  title: z.string(),
-  timeline: z.array(TimelineItemSchema).min(1),
-  total_seconds: z.number().int().positive().optional(),
-  blocks: z.any().optional(),
-  debug: z.record(z.any()).optional(),
-});
-
-// Legacy types for backward compatibility (can remove later)
 export const CueSettings = z.object({
   start: z.boolean().default(true),
   halfway: z.boolean().default(false),
   last_round: z.boolean().default(true),
   tts: z.boolean().default(true),
 });
-
 export type CueSettings = z.infer<typeof CueSettings>;
 
-// Export the new types as the primary ones
-export type { TimelineItem, WorkoutJSON };
-export { TimelineItemSchema, WorkoutJSONSchema };
+const BaseBlock = z.object({
+  type: z.enum(["EMOM", "INTERVAL", "CIRCUIT", "TABATA"]),
+  title: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const EMOMBlock = BaseBlock.extend({
+  type: z.literal("EMOM"),
+  minutes: z.number().int().positive(),
+  instructions: z.array(z.object({
+    minute_mod: z.enum(["odd","even"]).optional(),
+    name: z.string(),
+    target_reps: z.number().int().positive().optional(),
+    target_seconds: z.number().int().positive().optional(),
+    cap_seconds: z.number().int().positive().optional(),
+  })).min(1),
+});
+
+export const IntervalBlock = BaseBlock.extend({
+  type: z.literal("INTERVAL"),
+  work_seconds: z.number().int().positive(),
+  rest_seconds: z.number().int().nonnegative().default(0),
+  sets: z.number().int().positive(),
+  sequence: z.array(z.object({
+    name: z.string(),
+    seconds: z.number().int().positive(),
+    rest_after_seconds: z.number().int().nonnegative().optional(),
+  })).optional(), // when provided, a set is composed of these sequential steps
+});
+
+export const CircuitBlock = BaseBlock.extend({
+  type: z.literal("CIRCUIT"),
+  rounds: z.number().int().positive(),
+  exercises: z.array(z.object({
+    name: z.string(),
+    seconds: z.number().int().positive().optional(),
+    reps: z.number().int().positive().optional(),
+    rest_after_seconds: z.number().int().nonnegative().optional(),
+  })).min(1),
+  rest_between_rounds_seconds: z.number().int().nonnegative().default(0),
+});
+
+export const TabataBlock = BaseBlock.extend({
+  type: z.literal("TABATA"),
+  rounds: z.number().int().positive().default(8),
+  work_seconds: z.number().int().positive().default(20),
+  rest_seconds: z.number().int().positive().default(10),
+  exercise: z.string().default("Mixed"),
+});
+
+export const WorkoutBlock = z.discriminatedUnion("type", [
+  EMOMBlock, IntervalBlock, CircuitBlock, TabataBlock
+]);
+
+export const WorkoutJSON = z.object({
+  title: z.string(),
+  total_minutes: z.number().positive(),
+  blocks: z.array(WorkoutBlock).min(1),
+  cues: CueSettings.default({ start:true, halfway:false, last_round:true, tts:true }),
+  debug: z.object({
+    used_ai: z.boolean().default(true),
+    inferred_mode: z.string().optional(),
+    notes: z.string().optional(),
+  }).optional()
+});
+export type WorkoutJSON = z.infer<typeof WorkoutJSON>;
+
+export const TimelineEvent = z.object({
+  startMs: z.number().nonnegative(),
+  endMs: z.number().positive(),
+  label: z.string(),
+  blockIndex: z.number().int().nonnegative(),
+  round: z.number().int().optional(),
+  cueAtMs: z.array(z.number().nonnegative()).optional(),
+});
+export type TimelineEvent = z.infer<typeof TimelineEvent>;
